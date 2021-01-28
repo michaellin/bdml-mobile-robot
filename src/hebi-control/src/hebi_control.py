@@ -8,7 +8,7 @@
 
 import numpy as np
 import math
-#import hebi
+import hebi
 from time import sleep
 from std_msgs.msg import Float64
 from sensor_msgs.msg import Joy

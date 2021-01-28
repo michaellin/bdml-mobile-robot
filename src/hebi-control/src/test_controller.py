@@ -28,6 +28,6 @@ joy_sub = rospy.Subscriber('joy', Joy, get_joy_cmd)
 rate = rospy.Rate(100)
 
 while True:
-  print(self.controllerCmds)
+  print(controllerCmds)
   rate.sleep()
 
