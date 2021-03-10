@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """ hebi_control.py
     ROS node for interfacing HEBI actuators. Example code.
-    author: Michael Andres Lin (michaelv03@gmail.com)
+    author: Michael Lin (michaelv03@gmail.com)
+            Emilio Reyes (ereyes35@stanford.edu)
+            Gaby Uribe
     date: 12/08/2020
 """
 
@@ -31,17 +33,24 @@ class HebiRobot(object):
 
   """
 
-  def __init__(self, family='X8-9', names=['X-80749'], noHw = False):
+  def __init__(self, family='X8-9', names=['X-80749'], no_hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
     self.vel_des = 0.0    # variable for velocity control
+
+    # user inputs linear vel (vx, vy) and angular vel (w)
+    self.user_cmd = np.zeros(3)
+    self.joint_vel_cmd = np.zeros(4)
 
     # store hebi actuator params
     self.family = family
     self.actuator_names = names
 
-    self.noHw = noHw
+    self.no_hw = no_hw
 
-    if (self.noHw):
+    # if we have motors connected then initialize them
+    if (self.no_hw):
+      ### HEBI initializations ###
+
       # automatic lookup of actuators connected to the network
       lookup = hebi.Lookup()
       # Give the Lookup process 2 seconds to discover modules
@@ -59,6 +68,10 @@ class HebiRobot(object):
       # set up the feedback callback function
       self.group.add_feedback_handler(self.get_actuator_feedback)
 
+      ### end: HEBI initializations ###
+
+    ### ROS initializations ###
+
     # start ROS node
     rospy.init_node('hebi_control', disable_signals=True)
 
@@ -70,18 +83,21 @@ class HebiRobot(object):
     # set ROS loop rate to 100. Same as default feedback rate from HEBI.
     self.rate = rospy.Rate(100)
 
+    ### end: ROS initializations ###
+
 
   def run_loop(self):
 
     while True:
-      # send feedback values
+      # publish feedback values from hebi motors to other ROS nodes
       self.feedback_pub.publish(self.joint_position)
 
-      # can do something with self.controllerCmds
-
-      if (self.noHw):
+      if (self.no_hw):
+        # first check that joint_vel_cmd is of correct size
+        if (len(self.joint_vel_cmd) != self.group.size):
+          raise Exception(f"joint_vel_cmd should be of size {self.group.size}")
         # command desired velocities
-        self.group_command.velocity = self.vel_des
+        self.group_command.velocity = self.joint_vel_cmd 
         self.group.send_command(self.group_command)
 
       self.rate.sleep()
@@ -122,14 +138,19 @@ class HebiRobot(object):
       Nothing
     """
     # storing the left and right joystick axes values
-    print("hi")
-    self.controllerCmds = data.axes[0:3]
+    self.user_cmd = data.axes[0:2] # TODO choose the joy stick direction mappings
+    # TODO here add some controller input post processing then save to self.user_cmd
+    # e.g. multiply with the inverse jacobian to get the joint velocities
+    # TODO store these joint velocities in self.joint_vel_cmd
+    # TODO saturate self.joint_vel_cmd
+    self.joint_vel_cmd = np.zeros(4)
     return
     
 
 
 if __name__ == '__main__':
-  hebi = HebiRobot(noHw=True)
+  hebi = HebiRobot(no_hw=True)
+
   try:
     hebi.run_loop()
   except KeyboardInterrupt:
