@@ -32,14 +32,17 @@ class HebiRobot(object):
       names (str): list of names of individual actuators in a chain
 
   """
+  max_vel = 2.1 # rad/s
+  min_joy_position = .12 # unit vector
+  step_interval = .2 # discretization bins 
 
-  def __init__(self, family='X8-9', names=['X-80749'], no_hw = False):
+  def __init__(self, family=['base','base'], names=['front_left leg','front_right leg'], no_hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
     self.vel_des = 0.0    # variable for velocity control
 
     # user inputs linear vel (vx, vy) and angular vel (w)
     self.user_cmd = np.zeros(3)
-    self.joint_vel_cmd = np.zeros(4)
+    self.joint_vel_cmd = np.zeros(len(names))
 
     # store hebi actuator params
     self.family = family
@@ -60,7 +63,7 @@ class HebiRobot(object):
         print("{0} | {1}".format(entry.family, entry.name))
 
       # get control group by family name and module name
-      self.group = lookup.get_group_from_names([self.family], self.actuator_names)
+      self.group = lookup.get_group_from_names(self.family, self.actuator_names)
 
       # create a group command object used to send commands to actuators
       self.group_command = hebi.GroupCommand(self.group.size)
@@ -76,7 +79,6 @@ class HebiRobot(object):
     rospy.init_node('hebi_control', disable_signals=True)
 
     # ROS publishers and subscribers
-    self.vel_des_sub = rospy.Subscriber('vel_des', Float64, self.get_vel_des)
     self.joy_sub = rospy.Subscriber('joy', Joy, self.get_joy_cmd)
     self.feedback_pub = rospy.Publisher('motor_pos', Float64, queue_size=3)
 
@@ -102,20 +104,6 @@ class HebiRobot(object):
 
       self.rate.sleep()
 
-  def get_vel_des(self, data):
-    """ Fetches motor command data as a callback
-
-    Args:
-      data: std_msgs.Float64 with desired motor velocity
-
-    Returns:
-      Nothing
-    """
-    self.vel_des = data.data
-    return
-
-
-
   def get_actuator_feedback(self, feedback):
     """ Fetches HEBI actuator sensor data as a callback
 
@@ -138,12 +126,18 @@ class HebiRobot(object):
       Nothing
     """
     # storing the left and right joystick axes values
-    self.user_cmd = data.axes[0:2] # TODO choose the joy stick direction mappings
+    self.user_cmd = np.zeros(2)
+
+    for i in range(0,2):      
+      if (data.axes[i] > self.min_joy_position):
+        self.user_cmd[i] = (data.axes[i] // self.step_interval) * self.max_vel * self.step_interval 
+
+    # TODO choose the joy stick direction mappings
     # TODO here add some controller input post processing then save to self.user_cmd
     # e.g. multiply with the inverse jacobian to get the joint velocities
     # TODO store these joint velocities in self.joint_vel_cmd
     # TODO saturate self.joint_vel_cmd
-    self.joint_vel_cmd = np.zeros(4)
+    self.joint_vel_cmd = self.user_cmd
     return
     
 
