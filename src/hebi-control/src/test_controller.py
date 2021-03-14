@@ -47,7 +47,7 @@ for entry in lookup.entrylist:
 sleep(2.0)
 family_name = "base"
 module_name = "front_left leg"
-group = lookup.get_group_from_names([family_name], ["front_left leg"])
+group = lookup.get_group_from_names([family_name, family_name], ["front_left leg", "front_right leg"])
 
 group_command = hebi.GroupCommand(group.size)
 group_feedback = hebi.GroupFeedback(group.size)
@@ -65,8 +65,8 @@ rate = rospy.Rate(100)
 while True:
 
   group.get_next_feedback(reuse_fbk=group_feedback)
-  group_command.velocity = controllerCmds[2]   # 
+  group_command.velocity = controllerCmds[:2]   # 
   group.send_command(group_command)
-  print(controllerCmds[2])
+  print(controllerCmds[:2])
   rate.sleep()
 
