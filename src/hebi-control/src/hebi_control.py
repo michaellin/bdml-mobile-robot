@@ -32,9 +32,19 @@ class HebiRobot(object):
       names (str): list of names of individual actuators in a chain
 
   """
-  max_vel = 2.1 # rad/s
+  max_joint_vel = 2.1 # rad/s
+  max_vel = .1 # m/s
   min_joy_position = .12 # unit vector
   step_interval = .2 # discretization bins 
+  lx = .29068 # m
+  ly = .2667 # m
+  lxy = lx + ly # m
+  r = .127 # m
+  invR = 1.0/r
+  A = np.array([ [1, -1, -(lxy)] , 
+                 [1, 1, (lxy)  ] ,
+                 [1, 1, -(lxy) ] , 
+                 [1, -1, (lxy) ]  ] )
 
   def __init__(self, family=['base','base'], names=['front_left leg','front_right leg'], no_hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
@@ -126,19 +136,28 @@ class HebiRobot(object):
       Nothing
     """
     # storing the left and right joystick axes values
-    self.user_cmd = np.zeros(2)
-
-    for i in range(0,2):      
-      if (data.axes[i] > self.min_joy_position):
-        self.user_cmd[i] = (data.axes[i] // self.step_interval) * self.max_vel * self.step_interval
+    # user_cmd = [Vx,Vy,omega]
+    self.user_cmd = np.zeros(3)
+    mapping = [3,2,0]
+    # TODO?: change max_vel to array catersian max vel 
+    for i,m in enumerate(mapping):      
+      if (abs(data.axes[m]) > self.min_joy_position) :
+        self.user_cmd[i] = (data.axes[m] // self.step_interval) * \
+                            self.max_vel * self.step_interval 
+        
+    B = self.A * self.invR
+    C = B.dot(self.user_cmd)
+    #print(f"joint vel {self.user_cmd} output {C}")
+    self.joint_vel_cmd = np.clip(C,-self.max_joint_vel,self.max_joint_vel)
+    # C = [top_left, top_right, bottom_left, bottom_right]
 
     # TODO choose the joy stick direction mappings
     # TODO here add some controller input post processing then save to self.user_cmd
     # e.g. multiply with the inverse jacobian to get the joint velocities
     # TODO store these joint velocities in self.joint_vel_cmd
     # TODO saturate self.joint_vel_cmd
-    self.joint_vel_cmd = self.user_cmd
-    return
+    
+    return 
     
 
 
