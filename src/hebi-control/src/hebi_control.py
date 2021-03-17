@@ -96,8 +96,8 @@ class HebiRobot(object):
 
       if (self.no_hw):
         # first check that joint_vel_cmd is of correct size
-        if (len(self.joint_vel_cmd) != self.group.size):
-          raise Exception(f"joint_vel_cmd should be of size {self.group.size}")
+        assert (len(self.joint_vel_cmd) != self.group.size), 
+                f"joint_vel_cmd should be of size {self.group.size}"
         # command desired velocities
         self.group_command.velocity = self.joint_vel_cmd 
         self.group.send_command(self.group_command)
@@ -130,7 +130,7 @@ class HebiRobot(object):
 
     for i in range(0,2):      
       if (data.axes[i] > self.min_joy_position):
-        self.user_cmd[i] = (data.axes[i] // self.step_interval) * self.max_vel * self.step_interval 
+        self.user_cmd[i] = (data.axes[i] // self.step_interval) * self.max_vel * self.step_interval
 
     # TODO choose the joy stick direction mappings
     # TODO here add some controller input post processing then save to self.user_cmd
