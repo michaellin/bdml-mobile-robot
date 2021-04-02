@@ -46,7 +46,7 @@ class HebiRobot(object):
                  [1, 1, -(lxy) ] , 
                  [1, -1, (lxy) ]  ] )
 
-  def __init__(self, family=['base','base'], names=['front_left leg','front_right leg'], no_hw = False):
+  def __init__(self, family=['base','base', 'base', 'base'], names=['front_left_leg','front_right_leg', 'back_left_leg', 'back_right_leg'], no_hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
     self.vel_des = 0.0    # variable for velocity control
 
@@ -106,8 +106,8 @@ class HebiRobot(object):
 
       if (self.no_hw):
         # first check that joint_vel_cmd is of correct size
-        assert (len(self.joint_vel_cmd) != self.group.size), 
-                f"joint_vel_cmd should be of size {self.group.size}"
+        assert (len(self.joint_vel_cmd) == self.group.size), \
+                f"joint_vel_cmd is of size {len(self.joint_vel_cmd)} but should be of size {self.group.size}"
         # command desired velocities
         self.group_command.velocity = self.joint_vel_cmd 
         self.group.send_command(self.group_command)
