@@ -32,8 +32,8 @@ class HebiRobot(object):
       names (str): list of names of individual actuators in a chain
 
   """
-  max_joint_vel = 2.1 # rad/s
-  max_vel = .1 # m/s
+  max_joint_vel = 1.5 # rad/s
+  max_vel = .3 # m/s
   min_joy_position = .12 # unit vector
   step_interval = .2 # discretization bins 
   lx = .29068 # m
@@ -41,12 +41,13 @@ class HebiRobot(object):
   lxy = lx + ly # m
   r = .127 # m
   invR = 1.0/r
-  A = np.array([ [1, -1, -(lxy)] , 
-                 [1, 1, (lxy)  ] ,
-                 [1, 1, -(lxy) ] , 
-                 [1, -1, (lxy) ]  ] )
+  rot_scaler = 1.5;
+  A = np.array([ [-1, -1, -(lxy)*rot_scaler] , 
+                 [-1, 1, (lxy)*rot_scaler  ] ,
+                 [-1, 1, -(lxy)*rot_scaler ] , 
+                 [-1, -1, (lxy)*rot_scaler ]  ] )
 
-  def __init__(self, family=['base','base', 'base', 'base'], names=['front_left_leg','front_right_leg', 'back_left_leg', 'back_right_leg'], no_hw = False):
+  def __init__(self, family=['base','base', 'base', 'base'], names=['front_left_leg','front_right_leg', 'back_left_leg', 'back_right_leg'], hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
     self.vel_des = 0.0    # variable for velocity control
 
@@ -58,10 +59,10 @@ class HebiRobot(object):
     self.family = family
     self.actuator_names = names
 
-    self.no_hw = no_hw
+    self.hw = hw
 
     # if we have motors connected then initialize them
-    if (self.no_hw):
+    if (self.hw):
       ### HEBI initializations ###
 
       # automatic lookup of actuators connected to the network
@@ -104,12 +105,12 @@ class HebiRobot(object):
       # publish feedback values from hebi motors to other ROS nodes
       self.feedback_pub.publish(self.joint_position)
 
-      if (self.no_hw):
+      if (self.hw):
         # first check that joint_vel_cmd is of correct size
         assert (len(self.joint_vel_cmd) == self.group.size), \
                 f"joint_vel_cmd is of size {len(self.joint_vel_cmd)} but should be of size {self.group.size}"
         # command desired velocities
-        self.group_command.velocity = self.joint_vel_cmd 
+        self.group_command.velocity = (self.joint_vel_cmd * np.array([1, -1, 1 ,-1]))
         self.group.send_command(self.group_command)
 
       self.rate.sleep()
@@ -162,7 +163,7 @@ class HebiRobot(object):
 
 
 if __name__ == '__main__':
-  hebi = HebiRobot(no_hw=True)
+  hebi = HebiRobot(hw=True)
 
   try:
     hebi.run_loop()
