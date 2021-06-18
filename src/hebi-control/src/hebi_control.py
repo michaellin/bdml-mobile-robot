@@ -12,7 +12,7 @@ import numpy as np
 import math
 import hebi
 from time import sleep
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 from sensor_msgs.msg import Joy
 import rospy
 
@@ -32,27 +32,35 @@ class HebiRobot(object):
       names (str): list of names of individual actuators in a chain
 
   """
-  max_joint_vel = 1.5 # rad/s
-  max_vel = .3 # m/s
+  #max_joint_vel = 1.5 # rad/s
+  #max_vel = np.array([.3, .3, .2, 0.1]) # [m/s, m/s, rad/s]
+  max_joint_vel = 3.5 # rad/s
+  max_vel = np.array([.25, .25, .25, 0.5]) # [m/s, m/s, rad/s]
   min_joy_position = .12 # unit vector
   step_interval = .2 # discretization bins 
   lx = .29068 # m
   ly = .2667 # m
-  lxy = lx + ly # m
+  lxy = 1.0 # m
   r = .127 # m
   invR = 1.0/r
-  rot_scaler = 1.5;
-  A = np.array([ [-1, -1, -(lxy)*rot_scaler] , 
-                 [-1, 1, (lxy)*rot_scaler  ] ,
-                 [-1, 1, -(lxy)*rot_scaler ] , 
-                 [-1, -1, (lxy)*rot_scaler ]  ] )
+  rot_scaler = 1.
+  back_scalar = 2.0
+  #A = np.array([ [1, -1, -(lxy)*rot_scaler] , 
+  #               [1,  1,  (lxy)*rot_scaler  ] ,
+  #               [1, -1,  (lxy)*rot_scaler ] , 
+  #               [1,  1, -(lxy)*rot_scaler ]  ] )
+  A = np.array([ [1, -1, -(lxy), -1], 
+                 [1,  1,  (lxy), -1],
+                 [back_scalar, -back_scalar,  back_scalar*lxy, 1], 
+                 [back_scalar,  back_scalar, -back_scalar*lxy, 1]])
 
   def __init__(self, family=['base','base', 'base', 'base'], names=['front_left_leg','front_right_leg', 'back_left_leg', 'back_right_leg'], hw = False):
     self.joint_position = 0.0   # variable for sensor position reading
     self.vel_des = 0.0    # variable for velocity control
 
     # user inputs linear vel (vx, vy) and angular vel (w)
-    self.user_cmd = np.zeros(3)
+    self.user_cmd = np.zeros(4)
+    self.cmd_data_bias = np.zeros(4)
     self.joint_vel_cmd = np.zeros(len(names))
 
     # store hebi actuator params
@@ -77,6 +85,7 @@ class HebiRobot(object):
       self.group = lookup.get_group_from_names(self.family, self.actuator_names)
 
       # create a group command object used to send commands to actuators
+      assert hasattr(self.group, 'size'), "Group does not have attribute 'size' maybe you are not connected to actuators"
       self.group_command = hebi.GroupCommand(self.group.size)
 
       # set up the feedback callback function
@@ -91,7 +100,8 @@ class HebiRobot(object):
 
     # ROS publishers and subscribers
     self.joy_sub = rospy.Subscriber('joy', Joy, self.get_joy_cmd)
-    self.feedback_pub = rospy.Publisher('motor_pos', Float64, queue_size=3)
+    self.feedback_pub = rospy.Publisher('motor_vel', Float64MultiArray, queue_size=9)
+    self.cmd_pub = rospy.Publisher('motor_vel_cmd', Float64MultiArray, queue_size=9)
 
     # set ROS loop rate to 100. Same as default feedback rate from HEBI.
     self.rate = rospy.Rate(100)
@@ -102,15 +112,18 @@ class HebiRobot(object):
   def run_loop(self):
 
     while True:
-      # publish feedback values from hebi motors to other ROS nodes
-      self.feedback_pub.publish(self.joint_position)
-
       if (self.hw):
+        # publish feedback values from hebi motors to other ROS nodes
+        self.feedback_pub.publish(Float64MultiArray(data=self.joint_velocity))
+
         # first check that joint_vel_cmd is of correct size
         assert (len(self.joint_vel_cmd) == self.group.size), \
                 f"joint_vel_cmd is of size {len(self.joint_vel_cmd)} but should be of size {self.group.size}"
+        cmd_vel = self.joint_vel_cmd * np.array([1, -1, 1, -1])
+        self.cmd_pub.publish(Float64MultiArray(data=cmd_vel))
         # command desired velocities
-        self.group_command.velocity = (self.joint_vel_cmd * np.array([1, -1, 1 ,-1]))
+        #self.group_command.velocity = cmd_vel
+        self.group_command.effort = cmd_vel
         self.group.send_command(self.group_command)
 
       self.rate.sleep()
@@ -125,6 +138,7 @@ class HebiRobot(object):
       Nothing
     """
     self.joint_position = feedback.position
+    self.joint_velocity = feedback.velocity
     return
 
   def get_joy_cmd(self, data):
@@ -138,13 +152,22 @@ class HebiRobot(object):
     """
     # storing the left and right joystick axes values
     # user_cmd = [Vx,Vy,omega]
-    self.user_cmd = np.zeros(3)
-    mapping = [3,2,0]
+    self.user_cmd = np.zeros(4)
+    #self.user_cmd[3] = 0.0 # internal force
+    mapping = [3,2,0,4]
+    cmd_data = np.array([data.axes[m] for m in mapping])
+    cmd_data[3] = (1.0-(cmd_data[3]+1.0)/2.0)
+
+    if (data.buttons[5]):
+      # grab axes bias
+      self.cmd_data_bias = cmd_data
+      print(f"bias is {self.cmd_data_bias}")
     # TODO?: change max_vel to array catersian max vel 
-    for i,m in enumerate(mapping):      
-      if (abs(data.axes[m]) > self.min_joy_position) :
-        self.user_cmd[i] = (data.axes[m] // self.step_interval) * \
-                            self.max_vel * self.step_interval 
+    for i in range(len(mapping)):      
+      cmd = cmd_data[i] - self.cmd_data_bias[i]
+      if (abs(cmd) > self.min_joy_position) :
+        self.user_cmd[i] = (cmd // self.step_interval) * \
+                            self.max_vel[i] * self.step_interval 
         
     B = self.A * self.invR
     C = B.dot(self.user_cmd)
